@@ -1,7 +1,7 @@
 from flask import request, jsonify
 from models import db, Event, User, EventLocation, EventType, ParticipantRole, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from datetime import datetime
 import logging
 
@@ -14,14 +14,11 @@ def parse_datetime(date_string: str | None) -> datetime | None:
         if 'T' in date_string:
             if date_string.endswith('Z'):
                 date_string = date_string[:-1] + '+00:00'
-
             dt_aware = datetime.fromisoformat(date_string)
             return dt_aware.astimezone(timezone.utc)
-
         else:
             dt_naive = datetime.strptime(date_string, '%Y-%m-%d')
             return datetime(dt_naive.year, dt_naive.month, dt_naive.day, 0, 0, 0, tzinfo=timezone.utc)
-
     except ValueError as e:
         logger.warning(f"Could not parse datetime string: '{date_string}'. Error: {e}")
         return None
@@ -51,6 +48,16 @@ def register_event_routes(app):
             role_str = request.args.get('role')
             location_str = request.args.get('location')
             type_str = request.args.get('type')
+            search_term = request.args.get('search')
+
+            if search_term:
+                search_pattern = f"%{search_term}%"
+                query = query.filter(
+                    or_(
+                        Event.title.ilike(search_pattern),
+                        Event.description.ilike(search_pattern)
+                    )
+                )
 
             if start_date_str:
                 start_date_utc = parse_datetime(start_date_str)
@@ -58,7 +65,6 @@ def register_event_routes(app):
                     query = query.filter(
                         (Event.end_datetime >= start_date_utc) | (Event.start_datetime >= start_date_utc)
                     )
-
             if end_date_str:
                 end_date_utc = parse_datetime(end_date_str)
                 if end_date_utc:
@@ -71,14 +77,12 @@ def register_event_routes(app):
                     query = query.filter(Event.roles_available.like(f"%{role_enum.value}%"))
                 except ValueError:
                     logger.warning(f"Invalid role filter value: {role_str}")
-
             if location_str:
                 try:
                     location_enum = EventLocation(location_str)
                     query = query.filter(Event.location == location_enum)
                 except ValueError:
                     logger.warning(f"Invalid location filter value: {location_str}")
-
             if type_str:
                 try:
                     type_enum = EventType(type_str)
@@ -87,14 +91,12 @@ def register_event_routes(app):
                     logger.warning(f"Invalid type filter value: {type_str}")
 
             query = query.order_by(Event.start_datetime.asc())
-
             events = query.all()
             return jsonify([event.to_dict() for event in events]), 200
 
         except Exception as e:
             logger.error(f"Error fetching events: {e}", exc_info=True)
             return jsonify({"error": "Не удалось загрузить мероприятия"}), 500
-
 
     @app.route('/api/events/<int:event_id>', methods=['GET'])
     @jwt_required()

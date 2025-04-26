@@ -1,22 +1,26 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import 'react-toastify/dist/ReactToastify.css';
+import { useDebounce } from './hooks/useDebounce';
 
 import './styles/global.css';
 import './styles/common.css';
 import './styles/Header.css';
 import './styles/Modal.css';
-import './styles/EventFilter.css';
 import './styles/EventList.css';
 import './styles/EventDetailModal.css';
 import './styles/EventFormModal.css';
-import './styles/AdminControls.css';
+import './styles/ControlBar.css';
+import './styles/FilterModal.css';
+import './styles/ConfirmModal.css';
 
 import Header from './components/Header';
 import AuthModal from './components/AuthModal';
-import EventFilter from './components/EventFilter';
+import EventFilterModal from './components/EventFilter';
+import ControlBar from './components/ControlBar';
 import EventList from './components/EventList';
 import EventDetailModal from './components/EventDetailModal';
 import EventFormModal from './components/EventFormModal';
+import ConfirmModal from './components/ConfirmModal';
 import { ToastContainer, toast } from 'react-toastify';
 import { fetchWithAuth as fetchWithAuthHelper } from './utils/fetchWithAuth';
 import { User, Event, EventFilters, EventFormData } from './types';
@@ -33,11 +37,19 @@ const App = () => {
     const [events, setEvents] = useState<Event[]>([]);
     const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(false);
     const [eventError, setEventError] = useState<string | null>(null);
-    const [filters, setFilters] = useState<EventFilters>({});
     const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [eventToEdit, setEventToEdit] = useState<Event | null>(null);
+
+    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+    const [filters, setFilters] = useState<EventFilters>({});
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 400);
+
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [eventToDeleteId, setEventToDeleteId] = useState<number | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('authToken');
@@ -47,6 +59,7 @@ const App = () => {
         setAuthError(null);
         setEvents([]);
         setFilters({});
+        setSearchTerm('');
         toast.info("Вы вышли из системы.");
     }, []);
 
@@ -81,10 +94,10 @@ const App = () => {
                 .then(async response => {
                     if (!response.ok) {
                         const errorData = await response.json().catch(() => ({}));
-                        if (response.status !== 401) {
+                         if (response.status !== 401) {
                              throw new Error(errorData.error || `Ошибка проверки пользователя: ${response.status}`);
-                        }
-                        return null;
+                         }
+                         return null;
                     }
                     return response.json();
                 })
@@ -103,9 +116,7 @@ const App = () => {
                         console.error("Error fetching /api/me:", err);
                      }
                 })
-                .finally(() => {
-                    setAuthLoading(false);
-                });
+                .finally(() => { setAuthLoading(false); });
         } else {
              setIsAuthenticated(false);
              setCurrentUser(null);
@@ -114,10 +125,8 @@ const App = () => {
         }
     }, [authToken, fetchWithAuth]);
 
-
-    const fetchEvents = useCallback(async (currentFilters: EventFilters) => {
+    const fetchEvents = useCallback(async (currentFilters: EventFilters, currentSearchTerm: string) => {
         if (!isAuthenticated) {
-            console.log("fetchEvents called while not authenticated. Skipping.");
             setEvents([]);
             return;
         };
@@ -128,9 +137,13 @@ const App = () => {
         const queryParams = new URLSearchParams();
         Object.entries(currentFilters).forEach(([key, value]) => {
             if (value) {
-                queryParams.append(key, value);
+                queryParams.append(key, value as string);
             }
         });
+        if (currentSearchTerm) {
+            queryParams.append('search', currentSearchTerm);
+        }
+
         const queryString = queryParams.toString();
         const url = `/api/events${queryString ? `?${queryString}` : ''}`;
 
@@ -144,7 +157,6 @@ const App = () => {
             }
             const data: Event[] = await response.json();
             setEvents(data);
-            console.log(`Fetched ${data.length} events.`);
         } catch (err) {
              if (!(err instanceof Error && err.message.includes('401'))) {
                  const message = err instanceof Error ? err.message : 'Ошибка при загрузке мероприятий';
@@ -159,49 +171,111 @@ const App = () => {
 
     useEffect(() => {
         if (isAuthenticated) {
-            console.log("Authentication confirmed, triggering initial event fetch.");
-            fetchEvents(filters);
+            fetchEvents(filters, debouncedSearchTerm);
         } else {
              setEvents([]);
         }
-    }, [isAuthenticated, fetchEvents, filters]);
+    }, [isAuthenticated, fetchEvents, filters, debouncedSearchTerm]);
 
-    const handleFilterChange = useCallback((newFilters: EventFilters) => {
-        setFilters(newFilters);
-        fetchEvents(newFilters);
-    }, [fetchEvents]);
+    const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchTerm(event.target.value);
+    };
+
+    const handleOpenFilterModal = () => setIsFilterModalOpen(true);
+    const handleCloseFilterModal = () => setIsFilterModalOpen(false);
+
+    const handleApplyFilters = useCallback((filtersToApply: EventFilters) => {
+        setFilters(filtersToApply);
+        handleCloseFilterModal();
+    }, []);
 
     const handleResetFilters = useCallback(() => {
         setFilters({});
-        fetchEvents({});
-    }, [fetchEvents]);
-
-    const handleViewDetails = (event: Event) => {
-        setSelectedEvent(event);
-        setIsDetailModalOpen(true);
-    };
+        setSearchTerm('');
+        handleCloseFilterModal();
+    }, []);
 
     const handleOpenAddForm = () => {
         setEventToEdit(null);
         setIsFormModalOpen(true);
     };
-
      const handleOpenEditForm = (event: Event) => {
         setEventToEdit(event);
         setIsFormModalOpen(true);
     };
-
     const handleCloseDetailModal = () => {
         setIsDetailModalOpen(false);
         setSelectedEvent(null);
     };
-
      const handleCloseFormModal = () => {
         setIsFormModalOpen(false);
         setEventToEdit(null);
     };
+     const handleViewDetails = (event: Event) => {
+        setSelectedEvent(event);
+        setIsDetailModalOpen(true);
+    };
 
-     const handleRegister = async (formData: Record<string, string>) => {
+    const handleDeleteEvent = (eventId: number) => {
+        setEventToDeleteId(eventId);
+        setIsConfirmModalOpen(true);
+    };
+
+    const confirmDeleteAction = async () => {
+        if (eventToDeleteId === null) return;
+
+        setIsDeleting(true);
+
+        try {
+            const response = await fetchWithAuth(`/api/events/${eventToDeleteId}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Ошибка удаления мероприятия');
+            }
+            fetchEvents(filters, searchTerm);
+            toast.success("Мероприятие успешно удалено!");
+            if (selectedEvent?.id === eventToDeleteId) {
+                handleCloseDetailModal();
+            }
+        } catch (err) {
+            if (!(err instanceof Error && err.message.includes('401'))) {
+                 const message = err instanceof Error ? err.message : 'Произошла ошибка удаления';
+                 toast.error(message);
+            }
+        } finally {
+            setIsConfirmModalOpen(false);
+            setEventToDeleteId(null);
+            setIsDeleting(false);
+        }
+    };
+
+    const cancelDeleteAction = () => {
+        setIsConfirmModalOpen(false);
+        setEventToDeleteId(null);
+    };
+
+    const handleSaveEvent = async (formData: EventFormData) => {
+        const url = eventToEdit ? `/api/events/${eventToEdit.id}` : '/api/events';
+        const method = eventToEdit ? 'PUT' : 'POST';
+        try {
+            const response = await fetchWithAuth(url, { method, body: JSON.stringify(formData) });
+            if (!response.ok) {
+                 const errorData = await response.json().catch(() => ({}));
+                 throw new Error(errorData.error || `Ошибка ${eventToEdit ? 'обновления' : 'создания'} мероприятия`);
+            }
+            fetchEvents(filters, searchTerm);
+            toast.success(eventToEdit ? "Мероприятие успешно обновлено!" : "Мероприятие успешно создано!");
+            handleCloseFormModal();
+        } catch (err) {
+             if (!(err instanceof Error && err.message.includes('401'))) {
+                 const message = err instanceof Error ? err.message : 'Произошла ошибка сохранения';
+                 toast.error(message);
+             }
+             throw err;
+        }
+    };
+
+    const handleRegister = async (formData: Record<string, string>) => {
          setAuthError(null);
         try {
             const response = await fetch('/api/register', {
@@ -251,65 +325,12 @@ const App = () => {
         }
     };
 
-    const handleSaveEvent = async (formData: EventFormData) => {
-        const url = eventToEdit ? `/api/events/${eventToEdit.id}` : '/api/events';
-        const method = eventToEdit ? 'PUT' : 'POST';
-
-        try {
-            const response = await fetchWithAuth(url, {
-                method: method,
-                body: JSON.stringify(formData),
-            });
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Ошибка ${eventToEdit ? 'обновления' : 'создания'} мероприятия`);
-            }
-            const savedEvent: Event = await response.json();
-
-            fetchEvents(filters);
-
-            toast.success(eventToEdit ? "Мероприятие успешно обновлено!" : "Мероприятие успешно создано!");
-            handleCloseFormModal();
-
-        } catch (err) {
-            if (!(err instanceof Error && err.message.includes('401'))) {
-                const message = err instanceof Error ? err.message : 'Произошла ошибка';
-                toast.error(message);
-            }
-             throw err;
-        }
-    };
-
-    const handleDeleteEvent = async (eventId: number) => {
-        if (!window.confirm("Вы уверены, что хотите удалить это мероприятие?")) {
-            return;
-        }
-        try {
-            const response = await fetchWithAuth(`/api/events/${eventId}`, { method: 'DELETE' });
-            if (!response.ok) {
-                 const errorData = await response.json().catch(() => ({}));
-                 throw new Error(errorData.error || 'Ошибка удаления мероприятия');
-            }
-             fetchEvents(filters);
-             toast.success("Мероприятие успешно удалено!");
-
-             if (selectedEvent?.id === eventId) {
-                 handleCloseDetailModal();
-             }
-        } catch (err) {
-             if (!(err instanceof Error && err.message.includes('401'))) {
-                const message = err instanceof Error ? err.message : 'Произошла ошибка';
-                toast.error(message);
-             }
-        }
-    };
 
     if (authLoading) {
         return <div style={{ textAlign: 'center', margin: '4rem 0', fontSize: '1.2em' }}>Загрузка...</div>;
     }
 
-    const closeLoginModal = () => setIsLoginOpen(false);
-    const closeRegisterModal = () => setIsRegisterOpen(false);
+    const isFiltered = Object.values(filters).some(value => value !== '' && value !== undefined && value !== null);
 
     return (
       <div className="container">
@@ -321,22 +342,19 @@ const App = () => {
               onLogoutClick={handleLogout}
           />
 
+          {isAuthenticated && (
+              <ControlBar
+                  searchTerm={searchTerm}
+                  onSearchChange={handleSearchChange}
+                  onFilterClick={handleOpenFilterModal}
+                  onAddClick={handleOpenAddForm}
+                  isAdmin={currentUser?.is_admin ?? false}
+                  isFiltered={isFiltered}
+              />
+          )}
+
           {isAuthenticated ? (
               <>
-                  <EventFilter
-                      filters={filters}
-                      onFilterChange={handleFilterChange}
-                      onResetFilters={handleResetFilters}
-                  />
-
-                   {currentUser?.is_admin && (
-                        <div className="admin-controls card">
-                            <button onClick={handleOpenAddForm} className="primary-btn">
-                                Добавить мероприятие
-                            </button>
-                        </div>
-                    )}
-
                   <EventList
                       events={events}
                       isLoading={isLoadingEvents}
@@ -354,48 +372,29 @@ const App = () => {
               </div>
           )}
 
-          <AuthModal
-              isOpen={isRegisterOpen}
-              onClose={closeRegisterModal}
-              onSubmit={handleRegister}
-              title="Регистрация"
-              submitButtonText="Зарегистрироваться"
+          <AuthModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} onSubmit={handleRegister} title="Регистрация" submitButtonText="Зарегистрироваться" />
+          <AuthModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onSubmit={handleLogin} title="Вход" submitButtonText="Войти" />
+          {selectedEvent && <EventDetailModal isOpen={isDetailModalOpen} onClose={handleCloseDetailModal} event={selectedEvent} />}
+          {isFormModalOpen && <EventFormModal isOpen={isFormModalOpen} onClose={handleCloseFormModal} onSubmit={handleSaveEvent} eventToEdit={eventToEdit} />}
+          <EventFilterModal
+                isOpen={isFilterModalOpen}
+                onClose={handleCloseFilterModal}
+                initialFilters={filters}
+                onApplyFilters={handleApplyFilters}
+                onResetFilters={handleResetFilters}
           />
-          <AuthModal
-              isOpen={isLoginOpen}
-              onClose={closeLoginModal}
-              onSubmit={handleLogin}
-              title="Вход"
-              submitButtonText="Войти"
+          <ConfirmModal
+              isOpen={isConfirmModalOpen}
+              onClose={cancelDeleteAction}
+              onConfirm={confirmDeleteAction}
+              title="Подтвердить удаление"
+              message="Вы уверены, что хотите удалить это мероприятие? Это действие необратимо."
+              confirmText="Удалить"
+              cancelText="Отмена"
+              isLoading={isDeleting}
           />
-          {selectedEvent && (
-              <EventDetailModal
-                  isOpen={isDetailModalOpen}
-                  onClose={handleCloseDetailModal}
-                  event={selectedEvent}
-              />
-          )}
-           {isFormModalOpen && (
-               <EventFormModal
-                   isOpen={isFormModalOpen}
-                   onClose={handleCloseFormModal}
-                   onSubmit={handleSaveEvent}
-                   eventToEdit={eventToEdit}
-               />
-           )}
 
-          <ToastContainer
-              position="bottom-right"
-              autoClose={5000}
-              hideProgressBar={false}
-              newestOnTop={false}
-              closeOnClick
-              rtl={false}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-              theme="colored"
-          />
+          <ToastContainer position="bottom-right" autoClose={5000} hideProgressBar={false} newestOnTop={false} closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover theme="colored" />
         </div>
     );
 };

@@ -176,7 +176,7 @@ const EventFormModal: React.FC<EventFormModalProps> = ({ isOpen, onClose, onSubm
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="end_datetime">Дата и время окончания (необязательно)</label>
+                            <label htmlFor="end_datetime">Дата и время окончания</label>
                             <input
                                 type="datetime-local"
                                 id="end_datetime"
