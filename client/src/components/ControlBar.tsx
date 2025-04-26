@@ -1,4 +1,3 @@
-// src/components/ControlBar.tsx
 import React from 'react';
 
 interface ControlBarProps {

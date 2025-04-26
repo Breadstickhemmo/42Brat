@@ -324,7 +324,7 @@ const EventFormModal: React.FC<EventFormModalProps> = ({ isOpen, onClose, onSubm
 
                     </div>
 
-                    <button type="submit" className="primary-btn" disabled={isSubmitting} style={{ marginTop: '1.5rem' }}>
+                    <button type="submit" className="primary-btn" disabled={isSubmitting}>
                         {isSubmitting ? 'Сохранение...' : (eventToEdit ? 'Сохранить изменения' : 'Добавить мероприятие')}
                     </button>
                 </form>

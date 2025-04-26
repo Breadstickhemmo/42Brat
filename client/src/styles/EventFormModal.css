@@ -12,6 +12,16 @@
     grid-column: 1 / -1;
 }
 
+.modal-content.event-form-modal form button[type="submit"].primary-btn {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    display: block;
+    width: 100%;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .event-form-modal textarea.form-control {
     min-height: 100px;
     resize: vertical;

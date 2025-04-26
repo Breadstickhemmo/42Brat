@@ -382,10 +382,17 @@ const App = () => {
                  )}
               </>
           ) : (
-              <div className="card" style={{ textAlign: 'center', marginTop: '2rem' }}>
-                  <h2>Агрегатор мероприятий КемГУ</h2>
-                  <p>Войдите или зарегистрируйтесь, чтобы просматривать и управлять мероприятиями.</p>
-              </div>
+                <div className="card" style={{ textAlign: 'center', marginTop: '2rem' }}>
+                    <h2>Агрегатор мероприятий КемГУ</h2>
+                    <p style={{ marginBottom: '1.5rem' }}>
+                        Вся информация о событиях университета в одном месте.
+                        <br />
+                        Найдите интересные мероприятия и возможности для участия!
+                    </p>
+                    <p style={{ fontSize: '0.9em', color: '#666', marginTop: '1rem' }}>
+                        Войдите или зарегистрируйтесь, чтобы получить доступ ко всем функциям.
+                    </p>
+                </div>
           )}
 
           <AuthModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} onSubmit={handleRegister} title="Регистрация" submitButtonText="Зарегистрироваться" />

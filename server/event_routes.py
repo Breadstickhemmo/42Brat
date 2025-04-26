@@ -1,13 +1,14 @@
+from typing import Optional
 from flask import request, jsonify
-from models import db, Event, User, EventLocation, EventType, ParticipantRole, timezone
+from models import db, Event, User, EventLocation, EventType, ParticipantRole
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, or_
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
 
-def parse_datetime(date_string: str | None) -> datetime | None:
+def parse_datetime(date_string: Optional[str]) -> Optional[datetime]:
     if not date_string:
         return None
     try:
@@ -15,10 +16,12 @@ def parse_datetime(date_string: str | None) -> datetime | None:
             if date_string.endswith('Z'):
                 date_string = date_string[:-1] + '+00:00'
             dt_aware = datetime.fromisoformat(date_string)
-            return dt_aware.astimezone(timezone.utc)
+            utc_time = dt_aware.astimezone(timezone.utc)
+            return utc_time + timedelta(hours=7)
         else:
             dt_naive = datetime.strptime(date_string, '%Y-%m-%d')
-            return datetime(dt_naive.year, dt_naive.month, dt_naive.day, 0, 0, 0, tzinfo=timezone.utc)
+            utc_time = datetime(dt_naive.year, dt_naive.month, dt_naive.day, 0, 0, 0, tzinfo=timezone.utc)
+            return utc_time + timedelta(hours=7)
     except ValueError as e:
         logger.warning(f"Could not parse datetime string: '{date_string}'. Error: {e}")
         return None

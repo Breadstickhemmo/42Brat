@@ -1,5 +1,19 @@
 .modal-content.event-detail-modal {
     max-width: 600px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.modal-content.event-detail-modal h2,
+.modal-content.event-detail-modal p,
+.modal-content.event-detail-modal span,
+.modal-content.event-detail-modal a {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+.modal-content.event-detail-modal::-webkit-scrollbar {
+    display: none;
 }
 
 .event-detail-modal h2 {
@@ -32,7 +46,9 @@
     line-height: 1.6;
 }
 .event-detail-modal .description-section p {
-     white-space: pre-wrap;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
 }
 
 

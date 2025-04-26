@@ -59,6 +59,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
   }
   .event-card h3:hover {
       text-decoration: underline;
@@ -97,12 +99,14 @@
     text-overflow: ellipsis;
     min-height: calc(1.5em * 3);
     line-clamp: 3;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
   }
   
   .event-card-actions {
     display: flex;
     gap: 0.75rem;
-    justify-content: flex-end;
+    justify-content: center;
     margin-top: 1rem;
     border-top: 1px solid #f0f0f0;
     padding-top: 1rem;
@@ -127,31 +131,31 @@
   }
   
   @media (max-width: 768px) {
-      .event-grid {
-          grid-template-columns: 1fr;
-          gap: 1rem;
-      }
-      .event-card {
-          padding: 1rem 1.2rem;
-      }
-      .event-card-description {
-          -webkit-line-clamp: 4;
-          min-height: calc(1.5em * 4);
-          line-clamp: 4;
-      }
-  }
-  
-  @media (max-width: 480px) {
-       .event-card-actions {
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 0.5rem;
-      }
-       .event-card-actions .primary-btn,
-       .event-card-actions .secondary-btn,
-       .event-card-actions .delete-btn {
-          width: 100%;
-          max-width: 150px;
-          text-align: center;
-       }
-  }
+    .event-grid {
+
+        gap: 1rem;
+    }
+    .event-card {
+        padding: 1rem 1.2rem;
+    }
+    .event-card-description {
+        -webkit-line-clamp: 4;
+        min-height: calc(1.5em * 4);
+        line-clamp: 4;
+    }
+}
+
+@media (max-width: 480px) {
+     .event-card-actions {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+     .event-card-actions .primary-btn,
+     .event-card-actions .secondary-btn,
+     .event-card-actions .delete-btn {
+        width: 100%;
+        max-width: 150px;
+        text-align: center;
+     }
+}

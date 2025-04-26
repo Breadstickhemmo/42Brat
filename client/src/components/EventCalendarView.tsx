@@ -1,10 +1,15 @@
 import React from 'react';
-import { Calendar, momentLocalizer, EventPropGetter } from 'react-big-calendar';
+import { Calendar, momentLocalizer, View, ToolbarProps } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Event } from '../types';
 
-moment.locale('ru');
+moment.locale('ru', {
+  week: {
+    dow: 1,
+    doy: 4
+  }
+});
 const localizer = momentLocalizer(moment);
 
 interface EventCalendarViewProps {
@@ -21,15 +26,74 @@ interface CalendarEvent {
     resource: Event;
 }
 
+const CustomToolbar = (props: ToolbarProps<CalendarEvent, object>) => {
+    const { label, onNavigate, onView, view } = props;
+    
+    const availableViews = [
+        { key: 'month', label: 'Месяц' },
+        { key: 'week', label: 'Неделя' },
+        { key: 'day', label: 'День' },
+        { key: 'agenda', label: 'Повестка дня' }
+    ];
+
+    return (
+        <div className="rbc-toolbar">
+            <span className="rbc-btn-group">
+                <button 
+                    type="button" 
+                    className="rbc-nav-button"
+                    onClick={() => onNavigate('PREV')}
+                >
+                    ◄
+                </button>
+                <button 
+                    type="button" 
+                    className="rbc-today-button"
+                    onClick={() => onNavigate('TODAY')}
+                >
+                    Сегодня
+                </button>
+                <button 
+                    type="button" 
+                    className="rbc-nav-button"
+                    onClick={() => onNavigate('NEXT')}
+                >
+                    ►
+                </button>
+            </span>
+            
+            <span className="rbc-toolbar-label">{label}</span>
+            
+            <span className="rbc-btn-group">
+                {availableViews.map(v => (
+                    <button
+                        type="button"
+                        key={v.key}
+                        className={`rbc-view-button ${view === v.key ? 'rbc-active' : ''}`}
+                        onClick={() => onView(v.key as View)}
+                    >
+                        {v.label}
+                    </button>
+                ))}
+            </span>
+        </div>
+    );
+};
+
 const EventCalendarView: React.FC<EventCalendarViewProps> = ({
     events,
     isLoading,
     error,
     onViewDetails,
 }) => {
+    const [currentView, setCurrentView] = React.useState<View>('month');
+    const [currentDate, setCurrentDate] = React.useState<Date>(new Date());
+
     const calendarEvents: CalendarEvent[] = events.map((event) => {
         const startDate = new Date(event.start_datetime);
-        const endDate = event.end_datetime ? new Date(event.end_datetime) : startDate;
+        const endDate = event.end_datetime 
+            ? new Date(event.end_datetime) 
+            : new Date(startDate.getTime() + 60 * 60 * 1000);
 
         return {
             title: event.title,
@@ -43,8 +107,8 @@ const EventCalendarView: React.FC<EventCalendarViewProps> = ({
         onViewDetails(calendarEvent.resource);
     };
 
-    const eventStyleGetter = (event: CalendarEvent): { className?: string; style?: React.CSSProperties } => {
-        const style: React.CSSProperties = {
+    const eventStyleGetter = () => ({
+        style: {
             backgroundColor: '#007bff',
             borderRadius: '5px',
             opacity: 0.8,
@@ -53,12 +117,11 @@ const EventCalendarView: React.FC<EventCalendarViewProps> = ({
             display: 'block',
             fontSize: '0.85em',
             padding: '2px 5px'
-        };
-        return {
-            style: style,
-        };
-    };
+        }
+    });
 
+    const handleViewChange = (view: View) => setCurrentView(view);
+    const handleNavigate = (newDate: Date) => setCurrentDate(newDate);
 
     if (isLoading) {
         return <div className="event-list-loading card">Загрузка календаря...</div>;
@@ -75,23 +138,26 @@ const EventCalendarView: React.FC<EventCalendarViewProps> = ({
                 startAccessor="start"
                 endAccessor="end"
                 style={{ height: 600 }}
-                views={['month', 'week', 'day', 'agenda']}
+                view={currentView}
+                date={currentDate}
+                onView={handleViewChange}
+                onNavigate={handleNavigate}
                 onSelectEvent={handleSelectEvent}
                 eventPropGetter={eventStyleGetter}
+                components={{
+                    toolbar: CustomToolbar
+                }}
                 messages={{
-                    next: "След.",
-                    previous: "Пред.",
-                    today: "Сегодня",
-                    month: "Месяц",
-                    week: "Неделя",
-                    day: "День",
-                    agenda: "Повестка дня",
-                    date: "Дата",
-                    time: "Время",
-                    event: "Событие",
-                    noEventsInRange: "Нет событий в этом диапазоне.",
-                    showMore: total => `+ Показать еще (${total})`
-                 }}
+                    today: 'Сегодня',
+                    previous: '◄',
+                    next: '►',
+                    month: 'Месяц',
+                    week: 'Неделя',
+                    day: 'День',
+                    agenda: 'Повестка дня',
+                    noEventsInRange: 'Нет событий в этом диапазоне',
+                    showMore: total => `+${total} ещё`
+                }}
             />
         </div>
     );
