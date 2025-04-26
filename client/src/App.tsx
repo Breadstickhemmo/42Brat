@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import io, { Socket } from 'socket.io-client';
 import 'react-toastify/dist/ReactToastify.css';
 import { useDebounce } from './hooks/useDebounce';
 
@@ -13,6 +14,7 @@ import './styles/ControlBar.css';
 import './styles/FilterModal.css';
 import './styles/ConfirmModal.css';
 import './styles/EventCalendar.css';
+import './styles/TopNotification.css'; // Added
 
 import Header from './components/Header';
 import AuthModal from './components/AuthModal';
@@ -23,9 +25,20 @@ import EventCalendarView from './components/EventCalendarView';
 import EventDetailModal from './components/EventDetailModal';
 import EventFormModal from './components/EventFormModal';
 import ConfirmModal from './components/ConfirmModal';
+import TopNotification from './components/TopNotification'; // Added
 import { ToastContainer, toast } from 'react-toastify';
 import { fetchWithAuth as fetchWithAuthHelper } from './utils/fetchWithAuth';
 import { User, Event, EventFilters, EventFormData } from './types';
+
+const SOCKET_SERVER_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+const NOTIFICATION_TIMEOUT = 5000; // Defined here for consistency
+
+type NotificationData = {
+  title: string;
+  message: string;
+  eventId?: number;
+  key: number;
+} | null;
 
 const App = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -55,7 +68,16 @@ const App = () => {
 
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
+    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+    const socketRef = useRef<Socket | null>(null);
+    const [topNotification, setTopNotification] = useState<NotificationData>(null);
+    const notificationTimerRef = useRef<NodeJS.Timeout | null>(null);
+
     const handleLogout = useCallback(() => {
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
         localStorage.removeItem('authToken');
         setAuthToken(null);
         setCurrentUser(null);
@@ -72,7 +94,6 @@ const App = () => {
             return await fetchWithAuthHelper(url, options, handleLogout);
         } catch (error) {
             if (error instanceof Error && error.message.includes('401')) {
-
             } else if (error instanceof Error) {
                  toast.error(`Сетевая ошибка: ${error.message}`);
             } else {
@@ -81,6 +102,116 @@ const App = () => {
             throw error;
         }
     }, [handleLogout]);
+
+    const requestNotificationPermission = useCallback(async () => {
+        let currentPermission = Notification.permission;
+        if (!('Notification' in window)) {
+            toast.warn("Ваш браузер не поддерживает уведомления.");
+            setNotificationPermission('denied');
+            return 'denied';
+        }
+        if (currentPermission === 'default') {
+            currentPermission = await Notification.requestPermission();
+            setNotificationPermission(currentPermission);
+            if (currentPermission === 'granted') {
+                toast.info("Разрешение на уведомления получено!");
+            } else {
+                toast.warn("Вы отклонили разрешение на уведомления.");
+            }
+        } else if (currentPermission === 'denied') {
+             toast.warn("Уведомления заблокированы в настройках браузера.");
+        }
+        return currentPermission;
+    }, []);
+
+    const handleViewDetails = useCallback((event: Event | null) => {
+       setSelectedEvent(event);
+       setIsDetailModalOpen(!!event);
+    }, []);
+
+    const showTopNotification = useCallback((title: string, message: string, eventId?: number) => {
+        if (notificationTimerRef.current) {
+            clearTimeout(notificationTimerRef.current);
+        }
+        setTopNotification({ title, message, eventId, key: Date.now() });
+        notificationTimerRef.current = setTimeout(() => {
+             setTopNotification(null);
+             notificationTimerRef.current = null;
+        }, NOTIFICATION_TIMEOUT + 500);
+    }, []);
+
+    const handleCloseTopNotification = useCallback(() => {
+         if (notificationTimerRef.current) {
+             clearTimeout(notificationTimerRef.current);
+             notificationTimerRef.current = null;
+         }
+        setTopNotification(null);
+    }, []);
+
+     const handleTopNotificationClick = useCallback((eventId?: number) => {
+         if (eventId) {
+             const eventToShow = events.find(e => e.id === eventId);
+             if (eventToShow) handleViewDetails(eventToShow);
+             else console.warn(`Событие ${eventId} не найдено в списке.`);
+         }
+         handleCloseTopNotification();
+         window.focus();
+     }, [events, handleViewDetails, handleCloseTopNotification]);
+
+     useEffect(() => {
+         if ('Notification' in window) {
+             setNotificationPermission(Notification.permission);
+         }
+     }, []);
+
+    useEffect(() => {
+        if (isAuthenticated && !socketRef.current) {
+             console.log("Попытка подключения к WebSocket...");
+             const newSocket = io(SOCKET_SERVER_URL, { transports: ['websocket'] });
+
+             newSocket.on('connect', async () => {
+                console.log('WebSocket подключен:', newSocket.id);
+                await requestNotificationPermission();
+             });
+             newSocket.on('disconnect', (reason) => { console.log('WebSocket отключен:', reason); });
+             newSocket.on('connect_error', (error) => { console.error('Ошибка подключения WebSocket:', error); toast.error("Не удалось подключиться к серверу уведомлений."); });
+
+             newSocket.on('upcoming_event', (data: { eventId: number; title: string; message: string }) => {
+                console.log('Получено уведомление о предстоящем событии:', data);
+                showTopNotification(data.title, data.message, data.eventId);
+             });
+
+             newSocket.on('new_event_added', (data: { eventId: number; eventTitle: string }) => {
+                 console.log('Получено уведомление о новом событии:', data);
+                 const title = "Новое мероприятие!";
+                 const message = `Добавлено: "${data.eventTitle}". Нажмите, чтобы узнать подробности.`;
+                 showTopNotification(title, message, data.eventId);
+             });
+
+             socketRef.current = newSocket;
+
+        } else if (!isAuthenticated && socketRef.current) {
+             console.log("Отключение WebSocket...");
+             socketRef.current.disconnect();
+             socketRef.current = null;
+        }
+
+        return () => {
+             if (socketRef.current) {
+                 console.log("Отключение WebSocket при размонтировании App...");
+                 socketRef.current?.off('connect');
+                 socketRef.current?.off('disconnect');
+                 socketRef.current?.off('connect_error');
+                 socketRef.current?.off('upcoming_event');
+                 socketRef.current?.off('new_event_added');
+                 socketRef.current.disconnect();
+                 socketRef.current = null;
+             }
+             if (notificationTimerRef.current) {
+                 clearTimeout(notificationTimerRef.current);
+             }
+        };
+    }, [isAuthenticated, requestNotificationPermission, showTopNotification, handleCloseTopNotification, handleTopNotificationClick]);
 
     useEffect(() => {
         const tokenFromStorage = localStorage.getItem('authToken');
@@ -215,10 +346,6 @@ const App = () => {
         setIsFormModalOpen(false);
         setEventToEdit(null);
     };
-     const handleViewDetails = (event: Event) => {
-        setSelectedEvent(event);
-        setIsDetailModalOpen(true);
-    };
 
     const handleDeleteEvent = (eventId: number) => {
         setEventToDeleteId(eventId);
@@ -227,9 +354,7 @@ const App = () => {
 
     const confirmDeleteAction = async () => {
         if (eventToDeleteId === null) return;
-
         setIsDeleting(true);
-
         try {
             const response = await fetchWithAuth(`/api/events/${eventToDeleteId}`, { method: 'DELETE' });
             if (!response.ok) {
@@ -274,8 +399,8 @@ const App = () => {
              if (!(err instanceof Error && err.message.includes('401'))) {
                  const message = err instanceof Error ? err.message : 'Произошла ошибка сохранения';
                  toast.error(message);
+                 console.error("Save Event Error:", err);
              }
-             throw err;
         }
     };
 
@@ -329,7 +454,6 @@ const App = () => {
         }
     };
 
-
     if (authLoading) {
         return <div style={{ textAlign: 'center', margin: '4rem 0', fontSize: '1.2em' }}>Загрузка...</div>;
     }
@@ -338,6 +462,12 @@ const App = () => {
 
     return (
       <div className="container">
+          <TopNotification
+              notification={topNotification}
+              onClose={handleCloseTopNotification}
+              onClick={handleTopNotificationClick}
+          />
+
           <Header
               isAuthenticated={isAuthenticated}
               user={currentUser}
@@ -383,22 +513,33 @@ const App = () => {
               </>
           ) : (
                 <div className="card" style={{ textAlign: 'center', marginTop: '2rem' }}>
-                    <h2>Агрегатор мероприятий КемГУ</h2>
-                    <p style={{ marginBottom: '1.5rem' }}>
-                        Вся информация о событиях университета в одном месте.
-                        <br />
-                        Найдите интересные мероприятия и возможности для участия!
+                    <h2>Будь в центре событий КемГУ!</h2>
+                    <p style={{ lineHeight: 1.7, maxWidth: '600px', margin: '0 auto 1.5rem auto' }}>
+                        Наш агрегатор собирает все актуальные мероприятия Кемеровского государственного университета, чтобы вы ничего не пропустили.
                     </p>
-                    <p style={{ fontSize: '0.9em', color: '#666', marginTop: '1rem' }}>
-                        Войдите или зарегистрируйтесь, чтобы получить доступ ко всем функциям.
+                    <div style={{ textAlign: 'left', maxWidth: '450px', margin: '0 auto 2rem auto', paddingLeft: '20px' }}>
+                        <ul style={{ listStyle: '✓ ', paddingLeft: '1.2em' }}>
+                            <li style={{ marginBottom: '0.5rem' }}>Просматривайте список и календарь событий.</li>
+                            <li style={{ marginBottom: '0.5rem' }}>Находите роли для участников, волонтёров, организаторов.</li>
+                            <li style={{ marginBottom: '0.5rem' }}>Используйте фильтры по дате, месту и типу мероприятия.</li>
+                            <li>Получайте быстрый доступ к ссылкам на регистрацию.</li>
+                        </ul>
+                    </div>
+                    <p>
+                        <button className="secondary-btn" onClick={() => setIsLoginOpen(true)} style={{ marginRight: '10px' }}>Войти</button>
+                        <span style={{ margin: '0 5px' }}> или </span>
+                        <button className="primary-btn" onClick={() => setIsRegisterOpen(true)}>Зарегистрироваться</button>
+                    </p>
+                     <p style={{ fontSize: '0.9em', color: '#666', marginTop: '1rem' }}>
+                        Присоединяйтесь к активной жизни университета!
                     </p>
                 </div>
           )}
 
           <AuthModal isOpen={isRegisterOpen} onClose={() => setIsRegisterOpen(false)} onSubmit={handleRegister} title="Регистрация" submitButtonText="Зарегистрироваться" />
           <AuthModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} onSubmit={handleLogin} title="Вход" submitButtonText="Войти" />
-          {selectedEvent && <EventDetailModal isOpen={isDetailModalOpen} onClose={handleCloseDetailModal} event={selectedEvent} />}
-          {isFormModalOpen && <EventFormModal isOpen={isFormModalOpen} onClose={handleCloseFormModal} onSubmit={handleSaveEvent} eventToEdit={eventToEdit} />}
+          <EventDetailModal isOpen={isDetailModalOpen} onClose={handleCloseDetailModal} event={selectedEvent} />
+          <EventFormModal isOpen={isFormModalOpen} onClose={handleCloseFormModal} onSubmit={handleSaveEvent} eventToEdit={eventToEdit} />
           <EventFilterModal
                 isOpen={isFilterModalOpen}
                 onClose={handleCloseFilterModal}
