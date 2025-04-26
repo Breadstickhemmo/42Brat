@@ -12,12 +12,14 @@ import './styles/EventFormModal.css';
 import './styles/ControlBar.css';
 import './styles/FilterModal.css';
 import './styles/ConfirmModal.css';
+import './styles/EventCalendar.css';
 
 import Header from './components/Header';
 import AuthModal from './components/AuthModal';
 import EventFilterModal from './components/EventFilter';
 import ControlBar from './components/ControlBar';
 import EventList from './components/EventList';
+import EventCalendarView from './components/EventCalendarView';
 import EventDetailModal from './components/EventDetailModal';
 import EventFormModal from './components/EventFormModal';
 import ConfirmModal from './components/ConfirmModal';
@@ -50,6 +52,8 @@ const App = () => {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [eventToDeleteId, setEventToDeleteId] = useState<number | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
     const handleLogout = useCallback(() => {
         localStorage.removeItem('authToken');
@@ -350,20 +354,32 @@ const App = () => {
                   onAddClick={handleOpenAddForm}
                   isAdmin={currentUser?.is_admin ?? false}
                   isFiltered={isFiltered}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
               />
           )}
 
           {isAuthenticated ? (
               <>
-                  <EventList
-                      events={events}
-                      isLoading={isLoadingEvents}
-                      error={eventError}
-                      onViewDetails={handleViewDetails}
-                      onEdit={currentUser?.is_admin ? handleOpenEditForm : undefined}
-                      onDelete={currentUser?.is_admin ? handleDeleteEvent : undefined}
-                      isAdmin={currentUser?.is_admin ?? false}
-                  />
+                {viewMode === 'list' && (
+                    <EventList
+                        events={events}
+                        isLoading={isLoadingEvents}
+                        error={eventError}
+                        onViewDetails={handleViewDetails}
+                        onEdit={currentUser?.is_admin ? handleOpenEditForm : undefined}
+                        onDelete={currentUser?.is_admin ? handleDeleteEvent : undefined}
+                        isAdmin={currentUser?.is_admin ?? false}
+                    />
+                )}
+                 {viewMode === 'calendar' && (
+                    <EventCalendarView
+                        events={events}
+                        isLoading={isLoadingEvents}
+                        error={eventError}
+                        onViewDetails={handleViewDetails}
+                    />
+                 )}
               </>
           ) : (
               <div className="card" style={{ textAlign: 'center', marginTop: '2rem' }}>

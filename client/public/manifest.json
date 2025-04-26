@@ -1,6 +1,6 @@
 {
-  "short_name": "GitHub Report Generator",
-  "name": "Генерация отчетов по качеству кода GitHub репозиториев",
+  "short_name": "Агрегатор КемГУ",
+  "name": "Агрегатор мероприятий КемГУ",
   "icons": [
     {
       "src": "fav.ico",
