@@ -1,5 +1,5 @@
 import React from 'react';
-import { Event, ParticipantRole } from '../types';
+import { Event } from '../types';
 
 const CalendarIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">

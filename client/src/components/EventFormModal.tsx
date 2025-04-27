@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { Event, EventFormData, EventLocation, EventType, ParticipantRole } from '../types';
-import { toast } from 'react-toastify';
 
 interface EventFormModalProps {
     isOpen: boolean;
@@ -23,7 +22,6 @@ const formatDateTimeLocal = (isoString?: string | null): string => {
     }
 };
 
-// Helper to convert datetime-local string back to ISO string (UTC)
 const toISOStringUTC = (localDateTimeString?: string | null): string | undefined => {
     if (!localDateTimeString) return undefined;
     try {
@@ -35,7 +33,6 @@ const toISOStringUTC = (localDateTimeString?: string | null): string | undefined
         return undefined;
     }
 };
-
 
 const EventFormModal: React.FC<EventFormModalProps> = ({ isOpen, onClose, onSubmit, eventToEdit }) => {
     const {
